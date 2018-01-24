@@ -1,0 +1,61 @@
+package main.test.TestHiveCLI;
+
+import java.security.PrivilegedExceptionAction;
+
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
+import org.apache.hadoop.security.UserGroupInformation;
+
+public class HiveMetastoreDelegationToken {
+
+	public static void main(String [] args){
+		try{
+			getDelegationToken("adpqa","/data/home/devbld/rough/cdh","adpqa@INFAKRB.INFADEV.COM","/data/home/devbld/adpqa.keytab");
+		}catch(Exception e){
+			e.printStackTrace();
+		}
+	}
+	
+	 public static String getDelegationToken(String owner,String siteFileLocation,String principal, String keytab) throws Exception {
+       try {
+    	   
+           HiveConf hiveConf = new HiveConf();
+
+           hiveConf.addResource(new java.net.URL("file://" + siteFileLocation + "/hive-site.xml"));
+           hiveConf.addResource(new java.net.URL("file://" + siteFileLocation + "/core-site.xml"));
+           hiveConf.addResource(new java.net.URL("file://" + siteFileLocation + "/hdfs-site.xml"));
+           hiveConf.addResource(new java.net.URL("file://" + siteFileLocation + "/yarn-site.xml"));
+           
+           System.out.println("hive.metastore.uris=" + hiveConf.get("hive.metastore.uris"));           
+           
+           UserGroupInformation.setConfiguration(hiveConf);
+    	   UserGroupInformation.loginUserFromKeytab(principal, keytab);
+    	   UserGroupInformation ugi1 = UserGroupInformation.getLoginUser();
+    	   UserGroupInformation ugi = UserGroupInformation.createProxyUser("devbld", ugi1.getLoginUser());
+    	   UserGroupInformation.setLoginUser(ugi.getRealUser());
+    	   
+    	   System.out.println(UserGroupInformation.getCurrentUser() + " -- " + ugi.getRealUser() + " -- " + UserGroupInformation.getLoginUser());
+    	   
+           boolean useSasl = hiveConf.getBoolVar(HiveConf.ConfVars.METASTORE_USE_THRIFT_SASL);
+           String metastoreUri = hiveConf.getVar(HiveConf.ConfVars.METASTOREURIS);
+           if (!useSasl || metastoreUri.isEmpty()) {
+               throw new Exception(
+                   "Cannot get delegation token, either thrift url is empty or sasl is false");
+           }
+
+//           ugi.doAs(new PrivilegedExceptionAction<Integer>() {
+//               public Integer run() throws Exception {
+	        	   HiveMetaStoreClient metastoreClient = new HiveMetaStoreClient(hiveConf);
+	               metastoreClient.getDelegationToken(owner, owner);
+	               metastoreClient.close();
+//	               return 0;
+//               }
+//           });	
+//           
+           return "";
+       } catch (Exception e) {
+           throw new Exception("Error while fetching delegation token from hive metastore"
+               + e.getMessage());
+       }
+   }	
+}
